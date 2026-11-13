@@ -1,0 +1,205 @@
+=============================================================================
+INSTITUCION: IFTS N° 4
+CARRERA: Tecnicatura Superior en Desarrollo de Software (3er Año)
+MATERIA: Programación sobre Redes
+PROFESOR: Javier Blanco
+ALUMNO: Luis Segundo Ojeda
+TRABAJO PRACTICO: Trabajo Practico Integrador Final
+DOCUMENTO: MANUAL TECNICO DE ARQUITECTURA Y DISEÑO DE SOFTWARE
+=============================================================================
+
+1. DESCRIPCION GENERAL DE LA ARQUITECTURA
+-----------------------------------------------------------------------------
+El sistema responde a una arquitectura Cliente - Servidor Centralizada y
+Concurrente, implementada sobre la pila de protocolos TCP/IP:
+
+- Capa de Transporte: Protocolo TCP (Transmission Control Protocol),
+  garantizando entrega ordenada, libre de errores y orientada a la conexión.
+- Capa de Aplicación: Protocolo propio de texto delimitado codificado en
+  UTF-8 para la negociación de credenciales y el despacho de comandos.
+- Capa de Datos: Base de datos relacional MySQL integrada mediante el
+  conector oficial mysql-connector-python.
+- Capa de Presentación: Interfaces gráficas de escritorio nativas en Python
+  mediante la biblioteca Tkinter.
+
+
+2. ESTRUCTURA DE MODULOS DEL PROYECTO
+-----------------------------------------------------------------------------
+El proyecto se organiza en modulos desacoplados para cumplir con el principio
+de separacion de responsabilidades:
+
+* servidor.py:
+  Modulo principal del servidor. Inicializa el socket maestro de escucha,
+  gestiona el ciclo de vida de los hilos de atención de clientes, procesa
+  los comandos de red /hora, /usuarios, /followers y /adios, consulta la API
+  REST de GitHub y administra la consola visual de monitoreo en Tkinter.
+
+* cliente.py:
+  Modulo cliente. Establece la conexión con el servidor, envia las credenciales
+  de autenticación, corre un hilo asincrono secundario para recibir mensajes
+  del servidor sin congelar la GUI y provee el panel de chat y envio de comandos.
+
+* conexion_bd.py:
+  Capa de persistencia y acceso a datos (DAO). Centraliza los métodos de conexión,
+  inicializacion DDL/DML, validacion de usuarios y persistencia de seguidores
+  en la tabla 'followers' de MySQL.
+
+* basedatos.sql:
+  Script estandar SQL con las sentencias DDL para la creacion de la base de
+  datos 'db_github_api', sus tablas ('usuarios', 'followers') y registros iniciales de prueba.
+
+* requirements.txt:
+  Listado formal de dependencias externas requeridas por el intérprete Python.
+
+
+3. DETALLE DE IMPLEMENTACIÓN DE RED (SOCKETS TCP)
+-----------------------------------------------------------------------------
+Para la comunicación en red se utiliza el módulo nativo 'socket' de Python:
+
+- Familia de Direcciones: socket.AF_INET
+  Indica el uso del protocolo IPv4 para el direccionamiento de host.
+
+- Tipo de Socket: socket.SOCK_STREAM
+  Indica el uso de sockets de flujo (TCP), asegurando que los paquetes
+  lleguen completos y en la secuencia correcta.
+
+- Direccion y Puerto de Enlace (Servidor):
+  HOST = "0.0.0.0" (INADDR_ANY): Permite que el servidor escuche solicitudes
+  tanto en la interfaz de bucle invertido (loopback 127.0.0.1) como en la
+  interfaz física LAN asignada por el router (por ejemplo 192.168.x.x).
+  PUERTO = 5000: Puerto de capa de transporte de uso no privilegiado.
+
+- Opción SO_REUSEADDR:
+  servidor_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+  Evita que el sistema operativo mantenga el puerto bloqueado en estado
+  TIME_WAIT tras reiniciar el servidor, permitiendo enlazar inmediatamente
+  el puerto sin demoras.
+
+- Cola de Conexiones (Backlog):
+  servidor_socket.listen(10): Habilita una cola de espera de hasta 10
+  conexiones simultáneas antes de ser despachadas por accept().
+
+
+4. MODELO DE CONCURRENCIA Y MULTIHILOS (THREADING)
+-----------------------------------------------------------------------------
+Dado que la interfaz gráfica de usuario de Tkinter requiere un bucle contínuo
+de eventos (mainloop()) que es bloqueante por diseño, cualquier operacion de
+red síncrona (como accept() o recv()) congelaría la ventana provocando que el
+sistema operativo la marque como "No responde".
+
+Para resolver este desafío implementé un esquema multihilo desacoplado:
+
+A) En el Servidor (servidor.py):
+   1. Hilo Principal (Main Thread): Ejecuta el bucle de interfaz Tkinter
+      (ventana_servidor.mainloop()), atendiendo clicks, eventos de teclado y
+      actualizacion de componentes visuales.
+   2. Hilo de Escucha Maestro (hilo_escucha): Corre en segundo plano la función
+      iniciar_socket_servidor(). Se bloquea en accept() esperando nuevos clientes.
+   3. Hilos de Atención por Cliente (Worker Threads): Por cada cliente
+      aceptado por accept(), el hilo maestro crea un nuevo hilo dedicado:
+         hilo_cliente = threading.Thread(target=atender_cliente, args=(conn, addr), daemon=True)
+         hilo_cliente.start()
+      De esta forma, cada conexion opera en su propio contexto de ejecución.
+      El parámetro 'daemon=True' asegura que si la ventana del servidor se
+      cierra, todos los hilos secundarios finalicen de forma automática.
+
+B) En el Cliente (cliente.py):
+   1. Hilo Principal (Main Thread): Corre ventana_cliente.mainloop() controlando
+      la interacción del usuario.
+   2. Hilo Receptor (hilo_escucha): Al conectarse con éxito, lanza la función
+      recibir_mensajes_servidor() en un hilo secundario independiente
+      (daemon=True). Este hilo permanece bloqueado en socket_cliente.recv()
+      a la espera de mensajes enviados por el servidor, y al recibirlos actualiza
+      el componente Text de Tkinter de forma asíncrona.
+
+
+5. ESPECIFICACIÓN DEL PROTOCOLO DE APLICACIÓN
+-----------------------------------------------------------------------------
+El protocolo de nivel de aplicación diseñado para este trabajo es textual,
+sencillo y eficiente:
+
+Fase 1: Handshake y Autenticación
+- Cliente envia: "<username>|<password>"
+- Servidor procesa: Valida contra la tabla 'usuarios' de MySQL.
+- Servidor responde:
+  * Si es correcto: "OK|<mensaje_bienvenida>"
+  * Si es incorrecto: "ERROR|<motivo_del_rechazo>" y cierra la conexion.
+
+Fase 2: Mensajeria Ordinaria (Chat Bidireccional)
+- Mensaje Cliente -> Servidor: Texto libre sin prefijo "/".
+  El servidor lo registra en su consola y devuelve acuse de recibo:
+  "[Servidor recibio tu mensaje]: <texto>"
+- Mensaje Servidor -> Cliente(s): El operador emite:
+  "[SERVIDOR -> <destinatario>]: <texto>"
+
+Fase 3: Protocolo de Comandos Especiales (Prefijo '/')
+- /repos <usuario>: Consulta la API REST de GitHub (endpoint /users/{usuario}/repos),
+  persiste el nombre y html_url en la tabla 'repositorios' y notifica la cantidad guardada.
+- /followers <usuario>: Consume la API REST de GitHub (endpoint /users/{usuario}/followers),
+  persiste los seguidores en la tabla 'followers' y notifica al cliente la cantidad almacenada.
+- /hora: Retorna al cliente la hora oficial del servidor en formato HH:MM:SS
+  mediante datetime.now().strftime("%H:%M:%S").
+- /todos <mensaje>: Emite un mensaje de difusion (broadcast) a todos los clientes
+  conectados en la sala.
+- /usuarios: Devuelve la cantidad total y la lista unida por comas de todos los
+  clientes que mantienen una sesion activa en el diccionario 'clientes_conectados'.
+- /adios: Notifica el fin voluntario de la sesion, rompe el bucle de recepcion
+  y cierra el socket en el bloque 'finally' limpiando las estructuras en memoria.
+
+
+6. INTEGRACION CON LA API REST DE GITHUB
+-----------------------------------------------------------------------------
+El servidor consume la API publica de GitHub version v3 mediante el metodo
+HTTP GET proporcionado por la libreria 'requests':
+
+- Endpoint Repositorios:
+  URL: https://api.github.com/users/{usuario}/repos
+  Parametros: {"per_page": 30}
+  Campos extraidos e insertados: item["name"], item["html_url"]
+
+- Endpoint Seguidores:
+  URL: https://api.github.com/users/{usuario}/followers
+  Parametros: {"per_page": 30}
+  Campos extraidos e insertados: item["login"], item["html_url"]
+
+- Control de Errores HTTP:
+  Se evalua 'response.status_code':
+  * 200 (OK): Se procesa el payload JSON con response.json() y se inserta en BD.
+  * 404 (Not Found): Se notifica al cliente que el usuario no existe en GitHub.
+  * Captura de requests.RequestException ante cortes de conexion o timeout.
+
+
+7. MODELO DE DATOS Y PERSISTENCIA (MYSQL)
+-----------------------------------------------------------------------------
+Base de Datos: 'db_github_api'
+Motor de almacenamiento: InnoDB (soporte transaccional ACID)
+Juego de caracteres: utf8mb4
+
+Tablas del Sistema:
+1. Tabla 'usuarios' (Requerimiento de Autenticacion):
+   - id INT AUTO_INCREMENT PRIMARY KEY
+   - username VARCHAR(50) NOT NULL UNIQUE
+   - password VARCHAR(50) NOT NULL
+
+2. Tabla 'repositorios' (Persistencia de repositorios de GitHub):
+   - id INT AUTO_INCREMENT PRIMARY KEY
+   - name VARCHAR(150)
+   - html_url VARCHAR(255)
+
+3. Tabla 'followers' (Persistencia de seguidores de GitHub):
+   - id INT AUTO_INCREMENT PRIMARY KEY
+   - login VARCHAR(100)
+   - html_url VARCHAR(255)
+
+Buenas Practicas de Base de Datos Aplicadas:
+- Uso de Consultas Parametrizadas: Las consultas SELECT e INSERT utilizan
+  placeholders (%s) pasando los valores como tuplas al cursor de mysql.connector.
+  Esto neutraliza cualquier intento de inyeccion SQL (SQL Injection).
+- Control Transaccional: Se ejecutan sentencias conexion.commit() explícitas
+  para consolidar los cambios en el disco tras completar las inserciones.
+- Liberación de Recursos: Cada operación garantiza el cierre del cursor y
+  de la conexión (cursor.close() y conexion.close()) para evitar fugas de
+  descriptores de archivos en el motor de base de datos.
+
+Autor: Luis S. Ojeda
+Noviembre 2026

@@ -1,0 +1,82 @@
+=============================================================================
+IFTS N° 4 - Tecnicatura Superior en Desarrollo de Software
+Materia: Programación sobre Redes
+Profesor: Javier Blanco
+Alumno: Luis Segundo Ojeda
+TP Integrador Final: Servidor y Clientes Concurrentes en Python
+Archivo: credenciales.txt
+=============================================================================
+
+Dejo anotadas acá todas las credenciales y datos de configuración que preparé
+para realizar las pruebas de funcionamiento de mi TP, tanto para verificar
+la concurrencia como para hacer la demostración en clase.
+
+
+1. PARÁMETROS DE RED PARA CONECTAR EL CLIENTE
+-----------------------------------------------------------------------------
+Cuando abro una ventana de cliente.py, en el panel superior utilizo:
+
+- IP Servidor : 127.0.0.1
+  (Uso esta dirección local para probar cliente y servidor en mi misma máquina.
+  Si voy a conectar otra notebook por la red Wi-Fi del aula, me fijo la IP LAN
+  que me muestra la cabecera de servidor.py y pongo esa, por ej. 192.168.1.XX).
+
+- Puerto      : 5000
+  (Es el puerto TCP que configuré para escuchar en el servidor).
+
+
+2. CREDENCIALES DE BASE DE DATOS MYSQL (XAMPP)
+-----------------------------------------------------------------------------
+El sistema se conecta a MySQL con los valores estándar que usamos en clase:
+
+- Servidor      : localhost (127.0.0.1)
+- Puerto        : 3306
+- Usuario MySQL : root
+- Contraseña    : (vacía, sin clave)
+- Base de datos : db_github_api
+
+
+3. USUARIOS Y CONTRASEÑAS REGISTRADOS EN LA TABLA 'usuarios'
+-----------------------------------------------------------------------------
+Precargué estos 5 usuarios en MySQL para poder probar varios clientes
+concurrentes en simultáneo y verificar que el servidor atiende a cada uno
+en un hilo independiente:
+
++-----------------+-------------------+-------------------------------------+
+| Usuario         | Contraseña        | Uso que le doy en las pruebas       |
++-----------------+-------------------+-------------------------------------+
+| alumno          | 1234              | Mi usuario principal para chatear   |
+| javier          | 1234              | Usuario de cortesía para el profe   |
+| cliente1        | 1234              | Para abrir un 2do cliente a la vez  |
+| cliente2        | 1234              | Para abrir un 3er cliente a la vez  |
+| operador        | admin             | Cuenta con rol de operador          |
++-----------------+-------------------+-------------------------------------+
+
+
+4. CASOS DE PRUEBA QUE PREPARÉ PARA LA DEMOSTRACIÓN
+-----------------------------------------------------------------------------
+
+a) Prueba de Login Correcto (Puntos 2 y 3 del TP):
+   - Ingreso con 'alumno' y '1234'.
+   - El servidor valida contra MySQL, me manda la bienvenida y el estado
+     pasa a verde: "Conectado como 'alumno'".
+
+b) Prueba de Login Rechazado (Punto 3 del TP):
+   - Ingreso con 'alumno' y una clave incorrecta, por ejemplo '9999'.
+   - El servidor rechaza la conexión, me muestra la alerta de acceso denegado
+     y cierra el socket de inmediato.
+
+c) Prueba de Sesión Duplicada:
+   - Con la sesión de 'alumno' abierta, intento conectar otra ventana con
+     el mismo usuario 'alumno'.
+   - El servidor detecta que ya está conectado y me deniega el segundo acceso
+     para evitar colisiones de socket.
+
+d) Prueba de Concurrencia (Punto 1 del TP):
+   - Abro tres terminales:
+       1) python servidor.py
+       2) python cliente.py (inicio como 'alumno')
+       3) python cliente.py (inicio como 'javier')
+   - En el servidor veo que el contador sube a 2 clientes activos y puedo
+     mandar mensajes entre ambos sin que se bloquee ninguna ventana.
+

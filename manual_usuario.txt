@@ -1,0 +1,182 @@
+=============================================================================
+INSTITUCION: IFTS N° 4
+CARRERA: Tecnicatura Superior en Desarrollo de Software (3er Año)
+MATERIA: Programacion sobre Redes
+PROFESOR: Javier Blanco
+ALUMNO: Luis Segundo Ojeda
+TRABAJO PRACTICO: Trabajo Practico Integrador Final
+DOCUMENTO: MANUAL DE USUARIO
+=============================================================================
+
+1. INTRODUCCION
+-----------------------------------------------------------------------------
+El presente software es una aplicacion de red Cliente - Servidor concurrente
+desarrollada en lenguaje Python. Permite la comunicacion bidireccional en
+tiempo real mediante sockets TCP/IP, autentica el acceso de los clientes
+consultando una base de datos relacional MySQL (XAMPP), se integra con la
+API REST publica de GitHub para consultar y persistir seguidores, y procesa
+los comandos de red /hora, /usuarios, /followers y /adios.
+
+Ambos modulos (Servidor y Cliente) disponen de interfaces graficas de usuario
+(GUI) desarrolladas de forma nativa con Tkinter, disenadas para ser claras,
+limpias e intuitivas tanto para el operador del sistema como para los usuarios.
+
+
+2. REQUERIMIENTOS PREVIOS DEL ENTORNO
+-----------------------------------------------------------------------------
+Para poder ejecutar correctamente el software se requiere contar con:
+
+a) Python 3.10 o superior instalado en el equipo.
+b) XAMPP instalado (especificamente el modulo de base de datos MySQL).
+c) Librerias externas de Python (indicadas en requirements.txt):
+   - mysql-connector-python (controlador oficial de MySQL para Python)
+   - requests (cliente HTTP para consultar la API REST de GitHub)
+
+Para instalar las dependencias necesarias, abrir una terminal en la carpeta
+del proyecto y ejecutar:
+   pip install -r requirements.txt
+
+
+3. CONFIGURACION DE LA BASE DE DATOS (MYSQL / XAMPP)
+-----------------------------------------------------------------------------
+1. Abrir el Panel de Control de XAMPP e iniciar el modulo "MySQL"
+   (debe figurar con fondo verde en el puerto 3306).
+2. Los parametros de conexion configurados en el proyecto corresponden a los
+   valores por defecto de XAMPP:
+   - Host: localhost (127.0.0.1)
+   - Puerto: 3306
+   - Usuario: root
+   - Clave: (vacia, sin contrasena)
+   - Base de datos: db_github_api
+
+Nota sobre la inicializacion de la base de datos:
+Se puede importar el script "basedatos.sql" desde phpMyAdmin
+(http://localhost/phpmyadmin), O BIEN simplemente arrancar "servidor.py",
+ya que el codigo verifica al inicio si la base y sus tablas existen, y si no
+estan creadas las inicializa de manera totalmente automatica.
+
+Usuarios y claves de prueba precargados en la tabla 'usuarios':
++-----------------+-------------------+-------------------------------------+
+| Usuario         | Contrasena        | Perfil / Uso de prueba              |
++-----------------+-------------------+-------------------------------------+
+| alumno          | 1234              | Usuario regular de pruebas          |
+| javier          | 1234              | Usuario de catedra                  |
+| cliente1        | 1234              | Para probar concurrencia simultanea |
+| cliente2        | 1234              | Para probar concurrencia simultanea |
+| operador        | admin             | Cuenta de administracion            |
++-----------------+-------------------+-------------------------------------+
+
+
+4. GUIA DE PUESTA EN MARCHA Y USO
+-----------------------------------------------------------------------------
+
+PASO 1: Iniciar el Servidor (Consola de Administracion)
+------------------------------------------------------
+En una terminal situada en el directorio del proyecto, ejecutar:
+   python servidor.py
+
+Se abrira la ventana "Servidor Concurrente TCP - TP Final Programacion sobre Redes".
+En ella se podra observar:
+- Encabezado con la IP de la red local (LAN) y el puerto de escucha (5000).
+- Estado de conexion de la Base de Datos MySQL (en verde si esta conectada).
+- Contador de clientes activos en tiempo real.
+- Visor central de actividad con barra de desplazamiento (registra conexiones,
+  desconexiones, mensajes transmitidos y comandos ejecutados con su hora).
+- Panel inferior para transmitir mensajes desde el servidor hacia un cliente
+  especifico o hacia TODOS.
+
+
+PASO 2: Iniciar uno o multiples Clientes
+----------------------------------------
+En otra ventana de terminal (o varias terminales distintas para comprobar la
+concurrencia de multiples clientes), ejecutar:
+   python cliente.py
+
+Se abrira la ventana "Cliente TCP - TP Final Programacion sobre Redes".
+
+Procedimiento de inicio de sesion:
+1. En el "Panel de Conexion y Autenticacion":
+   - IP Servidor: ingresar 127.0.0.1 (o la IP LAN de la maquina del servidor
+     si se prueba entre dos computadoras de la misma red).
+   - Puerto: 5000.
+   - Usuario: ingresar un usuario registrado (por ejemplo "alumno").
+   - Contrasena: ingresar su clave (por ejemplo "1234").
+2. Presionar el boton "Conectar / Iniciar Sesion" (o la tecla Enter).
+   - Si las credenciales son incorrectas: el servidor rechaza el acceso, se
+     muestra un cartel de error y la sesion se cierra de inmediato.
+   - Si las credenciales son correctas: el servidor envia el mensaje de
+     bienvenida, se habilita el area de chat y los controles de envio.
+
+
+PASO 3: Envio de Mensajes de Chat (Bidireccional)
+------------------------------------------------
+- Chat Cliente -> Servidor:
+  El usuario escribe su mensaje en el campo inferior y presiona "Enviar Mensaje"
+  (o Enter). El texto llega al servidor y se registra en la consola con el
+  nombre del usuario emisor. El servidor confirma la recepcion al cliente.
+
+- Chat Servidor -> Cliente:
+  Desde la ventana del servidor, el operador selecciona en el menu desplegable
+  "Destinatario" el nombre de un usuario particular (o "TODOS"), escribe el
+  mensaje y pulsa "Enviar a Cliente(s)". El mensaje aparece instantaneamente
+  en la pantalla del cliente destinatario.
+
+
+5. LISTA DE COMANDOS ESPECIALES (PREFIJO '/')
+-----------------------------------------------------------------------------
+Cuando un mensaje comienza con una barra inclinada "/", el servidor lo
+interpreta como un comando en lugar de un mensaje comun de texto.
+Comandos disponibles:
+
+1) /repos <usuario_github>
+   - Funcion: Consulta a traves de la API REST publica de GitHub los repositorios
+     del usuario especificado y almacena su nombre ('name') y URL ('html_url')
+     en la tabla 'repositorios' de MySQL.
+   - Modo de uso: Escribir /repos seguido del usuario (por ejemplo: /repos javierblancoedu).
+   - Respuesta: Informa la cantidad de repositorios almacenados en la base de datos.
+
+2) /followers <usuario_github>
+   - Funcion: Consulta a traves de la API REST publica de GitHub los seguidores
+     del usuario especificado y almacena su nombre de usuario ('login') y URL de
+     perfil ('html_url') en la tabla 'followers' de MySQL.
+   - Modo de uso: Escribir /followers seguido de un nombre de usuario de GitHub
+     (por ejemplo: /followers javierblancoedu) y presionar "Enviar Mensaje" (o Enter).
+   - Respuesta: El servidor informa la cantidad de seguidores almacenados en la base
+     (por ejemplo: "[SERVIDOR]: Éxito. Se consultó la API de GitHub y se guardaron 30 seguidores de 'javierblancoedu' en la base de datos.").
+
+3) /hora
+   - Funcion: Solicita la hora oficial actual del servidor.
+   - Modo de uso: Escribir /hora en el campo de texto y pulsar "Enviar Mensaje" (o Enter).
+   - Respuesta: El servidor devuelve la hora exacta con formato HH:MM:SS.
+
+4) /todos "mensaje"
+   - Funcion: Emite un mensaje de difusion (broadcast) a todos los clientes conectados.
+   - Modo de uso: Escribir /todos seguido del texto (por ejemplo: /todos "Hola a todos").
+   - Respuesta: El servidor replica el mensaje en todas las terminales de cliente activas.
+
+5) /usuarios
+   - Funcion: Lista todos los usuarios que tienen una sesion activa en el servidor.
+   - Modo de uso: Escribir /usuarios en el campo de texto y pulsar "Enviar Mensaje" (o Enter).
+   - Respuesta: El servidor devuelve la cantidad total y los nombres de los usuarios conectados.
+
+6) /adios
+   - Funcion: Notifica al servidor el cierre voluntario de la sesion del cliente.
+   - Modo de uso: Escribir /adios en el campo de texto y pulsar "Enviar Mensaje" (o Enter).
+   - Respuesta: El servidor desvincula el socket del cliente, actualiza la lista de conectados y el cliente pasa a estado "Desconectado".
+
+
+6. SOLUCION DE PROBLEMAS HABITUALES
+-----------------------------------------------------------------------------
+* "Error: No se pudo conectar a MySQL (puerto 3306)":
+  Asegurarse de que el modulo MySQL de XAMPP este iniciado. Verificar que
+  no haya otra instancia de MariaDB o MySQL compitiendo por el puerto 3306.
+
+* "Conexion rechazada al conectar el cliente":
+  Verificar que "servidor.py" haya sido iniciado previamente y este en
+  ejecucion antes de intentar conectar cualquier cliente.
+
+* "El usuario ya posee una sesion activa":
+  El sistema no permite que dos clientes se autentiquen con el mismo nombre
+  de usuario al mismo tiempo. Utilizar otro usuario de la tabla (por ejemplo
+  "cliente1", "cliente2", "javier").
+
